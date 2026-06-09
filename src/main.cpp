@@ -22,6 +22,9 @@ float  irPrevAC  = 0;
 #define SAMPLING   100
 #define FINGER_ON  30000
 #define USEFIFO
+#define LED_R      25
+#define LED_G      26
+#define LED_B      27
 
 
 void setup()
@@ -29,6 +32,13 @@ void setup()
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  pinMode(LED_R, OUTPUT);
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_B, OUTPUT);
+  digitalWrite(LED_R, HIGH);
+  digitalWrite(LED_G, HIGH);
+  digitalWrite(LED_B, HIGH);
 
   Serial.println("Running...");
   delay(3000);
@@ -100,10 +110,16 @@ void loop()
         Serial.print("Red: "); Serial.print(red); Serial.print(","); Serial.print("Infrared: "); Serial.print(ir); Serial.print(".    ");
 
         if (ir < FINGER_ON){
+           digitalWrite(LED_R, LOW);
+           digitalWrite(LED_G, HIGH);
+           digitalWrite(LED_B, HIGH);
            Serial.println("No finger detected");
            break;
         }
         if(ir > FINGER_ON){
+           digitalWrite(LED_R, HIGH);
+           digitalWrite(LED_G, LOW);
+           digitalWrite(LED_B, HIGH);
            Serial.print("Oxygen % = ");
            Serial.print(ESpO2);
            Serial.print("%    ");
