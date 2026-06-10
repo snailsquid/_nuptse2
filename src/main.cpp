@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include "MAX30105.h"
+#include "display.h"
 MAX30105 particleSensor;
 
 double avered    = 0;
@@ -27,7 +28,6 @@ float  irPrevAC  = 0;
 #define LED_B      25
 #define BTN_PIN    32
 
-enum State { IDLE, CALIBRATE, READY, CALCULATE, FINISHED, FAIL_STATE };
 State state = IDLE;
 
 unsigned long stateEntryTime = 0;
@@ -67,6 +67,9 @@ void transitionTo(State newState) {
     }
     if (newState == CALCULATE) {
         calculateStartTime = stateEntryTime;
+    }
+    if (newState == FINISHED) {
+        btnDebounceActive = false;
     }
 }
 
@@ -109,6 +112,7 @@ void setup()
   particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
   particleSensor.enableDIETEMPRDY();
 
+  initDisplay();
   transitionTo(IDLE);
 }
 
@@ -252,20 +256,20 @@ void loop()
       break;
 
     case FINISHED:
-      if (now - stateEntryTime < 2000) {
+      if (now - stateEntryTime < 5000) {
         if (now - lastFlashToggle >= 500) {
           flashLedOn = !flashLedOn;
           lastFlashToggle = now;
           setLED(0, flashLedOn, 0);
         }
-      } else if (fingerFalling) {
+      } else if (btnClicked) {
         transitionTo(IDLE);
       }
       break;
 
     case FAIL_STATE:
       if (now - stateEntryTime < 2000) {
-        if (now - lastFlashToggle >= 500) {
+        if (now - lastFlashToggle >= 250) {
           flashLedOn = !flashLedOn;
           lastFlashToggle = now;
           setLED(flashLedOn, 0, 0);
@@ -275,4 +279,6 @@ void loop()
       }
       break;
   }
+
+  updateDisplay(state, bpm, delta, calculateStartTime, calCount);
 }
