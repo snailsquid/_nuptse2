@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>_nuptse</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <div class="logo">
+    <span class="logo-icon">◈</span>
+    <h1>_nuptse</h1>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting...</span>
+    <span class="entry-count" id="entryCount">0 entries</span>
+  </div>
+</header>
+
+<main>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-rank">#</th>
+          <th class="col-device">Device</th>
+          <th class="col-bpm">BPM</th>
+          <th class="col-delta">Delta</th>
+          <th class="col-spo2">SpO₂</th>
+          <th class="col-cal">Cal Avg</th>
+          <th class="col-time">Recorded</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">⟡</div>
+    <p>Waiting for first reading...</p>
+  </div>
+</main>
+
+<script>
+const tbody = document.getElementById('tbody');
+const emptyState = document.getElementById('emptyState');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const entryCount = document.getElementById('entryCount');
+
+function setStatus(state) {
+  statusDot.className = 'status-dot ' + state;
+  statusText.textContent = state === 'live' ? 'Live' : state === 'connecting' ? 'Connecting...' : 'Disconnected';
+}
+
+function render(data) {
+  if (!data || data.length === 0) {
+    emptyState.style.display = 'flex';
+    tbody.innerHTML = '';
+    entryCount.textContent = '0 entries';
+    return;
+  }
+  emptyState.style.display = 'none';
+  entryCount.textContent = data.length + ' entr' + (data.length === 1 ? 'y' : 'ies');
+  tbody.innerHTML = data.map((row, i) => {
+    const delta = row.delta >= 0 ? '+' + row.delta : row.delta;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+    return `<tr class="${i < 3 ? 'podium' : ''}">
+      <td class="col-rank"><span class="rank ${i < 3 ? 'medal' : ''}">${medal || (i + 1)}</span></td>
+      <td class="col-device"><span class="device-id">${row.device_id}</span></td>
+      <td class="col-bpm"><span class="bpm-value">${row.bpm}</span> <span class="unit">BPM</span></td>
+      <td class="col-delta"><span class="delta-value ${row.delta < 0 ? 'negative' : 'positive'}">${delta}</span></td>
+      <td class="col-spo2"><span class="spo2-value">${row.spo2.toFixed(1)}</span><span class="unit">%</span></td>
+      <td class="col-cal"><span class="cal-value">${row.cal_avg.toFixed(1)}</span></td>
+      <td class="col-time"><span class="time-value">${row.recorded_at}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+const ws = new WebSocket('ws://' + location.host);
+ws.onopen = () => setStatus('live');
+ws.onclose = () => setStatus('disconnected');
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === 'leaderboard') render(msg.data);
+};
+
+fetch('/api/leaderboard').then(r => r.json()).then(render).catch(() => {});
+</script>
+</body>
+</html>

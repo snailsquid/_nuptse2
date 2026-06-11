@@ -1,4 +1,7 @@
 #include <Wire.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <HTTPClient.h>
 #include "MAX30105.h"
 #include "display.h"
 MAX30105 particleSensor;
@@ -28,6 +31,21 @@ float  irPrevAC  = 0;
 #define LED_B      25
 #define BTN_PIN    32
 
+#define WIFI_SSID   "iotiot"
+#define WIFI_PASS   "lmnopqrs"
+
+#define TB_SERVER   "http://10.165.218.123"
+#define TB_PORT     1883
+#define TB_TOKEN    "FSxe5xcjroWmyKuCSHCG"
+
+#define LB_URL      "http://leaderboard.local:8081/api/score"
+
+#define WIFI_TIMEOUT    15000
+#define WIFI_CHECK_INT  5000
+#define MQTT_PUB_INT    100
+#define MQTT_LOOP_INT   50
+#define HTTP_TIMEOUT    2000
+
 State state = IDLE;
 
 unsigned long stateEntryTime = 0;
@@ -47,6 +65,14 @@ bool fingerOnPrev = false;
 
 static const char* stateNames[] = { "IDLE", "CALIBRATE", "READY", "CALCULATE", "FINISHED", "FAIL" };
 
+String deviceId;
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+
+unsigned long lastWifiCheck = 0;
+unsigned long lastMqttPublish = 0;
+unsigned long lastMqttLoop = 0;
 
 void setLED(bool r, bool g, bool b) {
     digitalWrite(LED_R, r ? LOW : HIGH);
@@ -70,6 +96,26 @@ void transitionTo(State newState) {
     }
     if (newState == FINISHED) {
         btnDebounceActive = false;
+        String payload = "{\"device_id\":\"" + deviceId +
+                         "\",\"bpm\":" + String(bpm) +
+                         ",\"delta\":" + String(delta) +
+                         ",\"spo2\":" + String(ESpO2) +
+                         ",\"cal_avg\":" + String(calAvg) +
+                         ",\"ts\":" + String(millis()) + "}";
+        HTTPClient http;
+        http.setTimeout(HTTP_TIMEOUT);
+        http.begin(LB_URL);
+        int httpCode = http.POST(payload);
+        if (httpCode > 0) {
+            Serial.print("Leaderboard POST: ");
+            Serial.println(httpCode);
+        } else {
+            Serial.print("Leaderboard POST failed: ");
+            Serial.println(http.errorToString(httpCode).c_str());
+        }
+        Serial.print("Delta: ");
+        Serial.println(delta);
+        http.end();
     }
 }
 
@@ -96,6 +142,32 @@ void setup()
   setLED(1, 1, 0); delay(500);
   setLED(0, 0, 0);
   delay(1000);
+
+  uint64_t chipid = ESP.getEfuseMac();
+  deviceId = String("NUPTSE-") + String((uint16_t)(chipid >> 32), HEX) + String((uint32_t)chipid, HEX);
+  deviceId.toUpperCase();
+  Serial.print("Device ID: "); Serial.println(deviceId);
+
+  Serial.print("Connecting to WiFi " + WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < WIFI_TIMEOUT) {
+    delay(500);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println();
+    Serial.print("WiFi connected, IP: "); Serial.println(WiFi.localIP());
+    mqttClient.setServer(TB_SERVER, TB_PORT);
+    if (mqttClient.connect(deviceId.c_str(), TB_TOKEN, NULL)) {
+      Serial.println("MQTT connected");
+    } else {
+      Serial.print("MQTT connect failed, rc="); Serial.println(mqttClient.state());
+    }
+  } else {
+    Serial.println();
+    Serial.println("WiFi failed — running offline");
+  }
 
   while (!particleSensor.begin(Wire, I2C_SPEED_FAST))
   {
@@ -281,4 +353,25 @@ void loop()
   }
 
   updateDisplay(state, bpm, delta, calculateStartTime, calCount);
+
+  if (millis() - lastWifiCheck >= WIFI_CHECK_INT) {
+    lastWifiCheck = millis();
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.reconnect();
+    }
+  }
+
+  if (mqttClient.connected()) {
+    if (millis() - lastMqttLoop >= MQTT_LOOP_INT) {
+      lastMqttLoop = millis();
+      mqttClient.loop();
+    }
+    if (millis() - lastMqttPublish >= MQTT_PUB_INT) {
+      lastMqttPublish = millis();
+      String payload = "{\"bpm\":" + String(bpm) +
+                       ",\"spo2\":" + String(ESpO2) +
+                       ",\"state\":\"" + String(stateNames[state]) + "\"}";
+      mqttClient.publish("v1/devices/me/telemetry", payload.c_str());
+    }
+  }
 }
