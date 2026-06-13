@@ -153,29 +153,32 @@ void drawFailScreen()
 void updateDisplay(State state, int bpm, double delta, unsigned long calcStart, int calCount)
 {
     static State lastState = (State)-1;
+    static unsigned long lastCalcDraw = 0;
 
     switch (state) {
         case IDLE:
-            if (lastState != IDLE) drawIdleScreen();
+            if (lastState != IDLE) { drawIdleScreen(); lastState = IDLE; }
             break;
         case CALIBRATE:
             drawCalibrateScreen(calCount);
             break;
         case READY:
-            if (lastState != READY) drawReadyScreen();
+            if (lastState != READY) { drawReadyScreen(); lastState = READY; }
             break;
         case CALCULATE:
             {
+                unsigned long now = millis();
+                if (now - lastCalcDraw < 100) break;
+                lastCalcDraw = now;
                 unsigned long elapsed = (millis() - calcStart) / 1000;
                 drawCalculateScreen(bpm, elapsed);
             }
             break;
         case FINISHED:
-            if (lastState != FINISHED) drawFinishedScreen(delta);
+            if (lastState != FINISHED) { drawFinishedScreen(delta); lastState = FINISHED; }
             break;
         case FAIL_STATE:
-            if (lastState != FAIL_STATE) drawFailScreen();
+            if (lastState != FAIL_STATE) { drawFailScreen(); lastState = FAIL_STATE; }
             break;
     }
-    lastState = state;
 }

@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <HTTPClient.h>
+#include <Preferences.h>
 #include "MAX30105.h"
 #include "display.h"
 MAX30105 particleSensor;
@@ -24,21 +25,24 @@ float  irPrevAC  = 0;
 #define TIMETOBOOT 3000
 #define SCALE      88.0
 #define SAMPLING   100
-#define FINGER_ON  30000
+#define FINGER_ON_HIGH   30000
+#define FINGER_ON_LOW    25000
+#define FINGER_DEBOUNCE_MS 300
+#define BPM_SMOOTH_ALPHA 0.3f
 #define USEFIFO
 #define LED_R      26
 #define LED_G      27
 #define LED_B      25
 #define BTN_PIN    32
 
-#define WIFI_SSID   "iotiot"
+#define WIFI_SSID   "iotioto"
 #define WIFI_PASS   "lmnopqrs"
 
-#define TB_SERVER   "http://10.165.218.123"
+#define TB_SERVER   "10.40.0.196"
 #define TB_PORT     1883
 #define TB_TOKEN    "FSxe5xcjroWmyKuCSHCG"
 
-#define LB_URL      "http://leaderboard.local:8081/api/score"
+#define LB_URL      "http://10.40.0.196:8081/api/score"
 
 #define WIFI_TIMEOUT    15000
 #define WIFI_CHECK_INT  5000
@@ -57,10 +61,14 @@ int calCount = 0;
 double calAvg = 0;
 unsigned long calculateStartTime = 0;
 double delta = 0;
+int smoothedBpm = 0;
 
 unsigned long btnDebounceStart = 0;
 bool btnDebounceActive = false;
+unsigned long fingerDebounceStart = 0;
+bool fingerDebounceActive = false;
 
+bool fingerOn = false;
 bool fingerOnPrev = false;
 
 static const char* stateNames[] = { "IDLE", "CALIBRATE", "READY", "CALCULATE", "FINISHED", "FAIL" };
@@ -93,11 +101,12 @@ void transitionTo(State newState) {
     }
     if (newState == CALCULATE) {
         calculateStartTime = stateEntryTime;
+        smoothedBpm = 0;
     }
     if (newState == FINISHED) {
         btnDebounceActive = false;
         String payload = "{\"device_id\":\"" + deviceId +
-                         "\",\"bpm\":" + String(bpm) +
+                         "\",\"bpm\":" + String(smoothedBpm) +
                          ",\"delta\":" + String(delta) +
                          ",\"spo2\":" + String(ESpO2) +
                          ",\"cal_avg\":" + String(calAvg) +
@@ -105,6 +114,7 @@ void transitionTo(State newState) {
         HTTPClient http;
         http.setTimeout(HTTP_TIMEOUT);
         http.begin(LB_URL);
+        http.addHeader("Content-Type", "application/json");
         int httpCode = http.POST(payload);
         if (httpCode > 0) {
             Serial.print("Leaderboard POST: ");
@@ -117,6 +127,74 @@ void transitionTo(State newState) {
         Serial.println(delta);
         http.end();
     }
+
+    Preferences prefs;
+    prefs.begin("nuptse", false);
+    if (newState == IDLE || newState == FINISHED) {
+        prefs.putBool("active", false);
+        prefs.putInt("savedState", IDLE);
+    } else {
+        prefs.putBool("active", true);
+        prefs.putInt("savedState", (int)newState);
+    }
+    prefs.end();
+}
+
+void checkBackendConnectivity() {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("Backend check skipped — WiFi not connected");
+        return;
+    }
+    Serial.print("Checking leaderboard backend at http://10.40.0.196:8081/api/leaderboard");
+    Serial.println();
+    HTTPClient http;
+    http.setTimeout(HTTP_TIMEOUT);
+    http.begin("http://10.40.0.196:8081/api/leaderboard");
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+        Serial.print("Leaderboard backend reachable, HTTP ");
+        Serial.println(httpCode);
+    } else {
+        Serial.print("Leaderboard backend unreachable: ");
+        Serial.println(http.errorToString(httpCode).c_str());
+    }
+    http.end();
+}
+
+void reportInterruptedSession() {
+    Preferences prefs;
+    prefs.begin("nuptse", true);
+    bool wasActive = prefs.getBool("active", false);
+    int lastSaved = prefs.getInt("savedState", IDLE);
+    prefs.end();
+
+    if (wasActive && lastSaved != IDLE && lastSaved != FINISHED) {
+        Serial.println("Interrupted session detected, reporting to leaderboard...");
+        String payload = "{\"device_id\":\"" + deviceId +
+                         "\",\"bpm\":0,\"delta\":0,\"spo2\":0,\"cal_avg\":0" +
+                         ",\"ts\":" + String(millis()) +
+                         ",\"interrupted\":true}";
+        HTTPClient http;
+        http.setTimeout(HTTP_TIMEOUT);
+        http.begin(LB_URL);
+        http.addHeader("Content-Type", "application/json");
+        int httpCode = http.POST(payload);
+        if (httpCode > 0) {
+            Serial.print("Interrupted session POST: ");
+            Serial.println(httpCode);
+        } else {
+            Serial.print("Interrupted session POST failed: ");
+            Serial.println(http.errorToString(httpCode).c_str());
+        }
+        http.end();
+    } else {
+        Serial.println("No interrupted session found");
+    }
+
+    prefs.begin("nuptse", false);
+    prefs.putBool("active", false);
+    prefs.putInt("savedState", IDLE);
+    prefs.end();
 }
 
 void setup()
@@ -148,7 +226,8 @@ void setup()
   deviceId.toUpperCase();
   Serial.print("Device ID: "); Serial.println(deviceId);
 
-  Serial.print("Connecting to WiFi " + WIFI_SSID);
+  Serial.print("Connecting to WiFi ");
+  Serial.print(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   unsigned long wifiStart = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < WIFI_TIMEOUT) {
@@ -158,6 +237,8 @@ void setup()
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println();
     Serial.print("WiFi connected, IP: "); Serial.println(WiFi.localIP());
+    checkBackendConnectivity();
+    reportInterruptedSession();
     mqttClient.setServer(TB_SERVER, TB_PORT);
     if (mqttClient.connect(deviceId.c_str(), TB_TOKEN, NULL)) {
       Serial.println("MQTT connected");
@@ -212,7 +293,11 @@ void loop()
       unsigned long now = millis();
       if (lastBeatTime != 0) {
         unsigned long interval = now - lastBeatTime;
-        bpm = (interval > 0) ? (60000.0 / interval) : 0;
+        if (interval >= 300) {
+          bpm = (interval > 0) ? (60000.0 / interval) : 0;
+          if (smoothedBpm == 0) smoothedBpm = bpm;
+          else smoothedBpm = (int)((1.0 - BPM_SMOOTH_ALPHA) * smoothedBpm + BPM_SMOOTH_ALPHA * bpm);
+        }
       }
       lastBeatTime = now;
     }
@@ -263,7 +348,23 @@ void loop()
 
   unsigned long now = millis();
 
-  bool fingerOn = (ir > FINGER_ON);
+  bool fingerRaw;
+  if (ir > FINGER_ON_HIGH) fingerRaw = true;
+  else if (ir < FINGER_ON_LOW) fingerRaw = false;
+  else fingerRaw = fingerOn;
+
+  if (fingerRaw != fingerOn) {
+    if (!fingerDebounceActive) {
+      fingerDebounceActive = true;
+      fingerDebounceStart = now;
+    } else if (now - fingerDebounceStart >= FINGER_DEBOUNCE_MS) {
+      fingerOn = fingerRaw;
+      fingerDebounceActive = false;
+    }
+  } else {
+    fingerDebounceActive = false;
+  }
+
   bool fingerRising = fingerOn && !fingerOnPrev;
   bool fingerFalling = !fingerOn && fingerOnPrev;
   fingerOnPrev = fingerOn;
@@ -319,7 +420,7 @@ void loop()
     case CALCULATE:
       setLED(0, 1, 0);
       if (now - stateEntryTime >= 60000) {
-        delta = bpm - calAvg;
+        delta = smoothedBpm - calAvg;
         transitionTo(FINISHED);
       }
       if (fingerFalling) {
@@ -352,7 +453,7 @@ void loop()
       break;
   }
 
-  updateDisplay(state, bpm, delta, calculateStartTime, calCount);
+  updateDisplay(state, smoothedBpm, delta, calculateStartTime, calCount);
 
   if (millis() - lastWifiCheck >= WIFI_CHECK_INT) {
     lastWifiCheck = millis();
@@ -368,7 +469,7 @@ void loop()
     }
     if (millis() - lastMqttPublish >= MQTT_PUB_INT) {
       lastMqttPublish = millis();
-      String payload = "{\"bpm\":" + String(bpm) +
+      String payload = "{\"bpm\":" + String(smoothedBpm) +
                        ",\"spo2\":" + String(ESpO2) +
                        ",\"state\":\"" + String(stateNames[state]) + "\"}";
       mqttClient.publish("v1/devices/me/telemetry", payload.c_str());

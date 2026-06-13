@@ -1,0 +1,6 @@
+{
+  "signature": "src/display.cpp::Unresolved from this turn — src/display.cpp:\n🔴 STOP — 1 issue(s) must be fixed:\n  L1: display.h: No such file or directory",
+  "sessionId": "lens-mqcdryjf-f9141578",
+  "projectSeqStart": 12,
+  "projectSeqEnd": 13
+}

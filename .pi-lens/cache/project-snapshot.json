@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "projectRoot": "/home/ark/Project/_nuptse2",
+  "generatedAt": "2026-06-13T13:29:10.134Z",
+  "seq": 14,
+  "files": {
+    "/home/ark/Project/_nuptse2/web/db.js": {
+      "path": "/home/ark/Project/_nuptse2/web/db.js",
+      "mtimeMs": 1781355562085.8196,
+      "size": 1304,
+      "imports": [],
+      "lastSeq": 0
+    },
+    "/home/ark/Project/_nuptse2/web/server.js": {
+      "path": "/home/ark/Project/_nuptse2/web/server.js",
+      "mtimeMs": 1781355562085.8196,
+      "size": 1249,
+      "imports": [],
+      "lastSeq": 0
+    }
+  },
+  "symbols": {},
+  "reverseDeps": {
+    "/home/ark/Project/_nuptse2/web/db.js": [],
+    "/home/ark/Project/_nuptse2/web/server.js": []
+  },
+  "cachedExports": [],
+  "projectRulesScan": {
+    "rules": [],
+    "hasCustomRules": false
+  },
+  "startupScan": {
+    "cwd": "/home/ark/Project/_nuptse2",
+    "scanRoot": "/home/ark/Project/_nuptse2",
+    "projectRoot": "/home/ark/Project/_nuptse2",
+    "canWarmCaches": true,
+    "sourceFileCount": 2
+  },
+  "languageProfile": {
+    "present": {
+      "jsts": true,
+      "python": false,
+      "go": false,
+      "rust": false,
+      "cxx": false,
+      "cmake": false,
+      "fish": false,
+      "shell": false,
+      "json": false,
+      "markdown": false,
+      "css": false,
+      "yaml": false,
+      "sql": false,
+      "ruby": false,
+      "html": false,
+      "docker": false,
+      "php": false,
+      "powershell": false,
+      "prisma": false,
+      "csharp": false,
+      "fsharp": false,
+      "java": false,
+      "kotlin": false,
+      "swift": false,
+      "dart": false,
+      "lua": false,
+      "zig": false,
+      "haskell": false,
+      "elixir": false,
+      "gleam": false,
+      "ocaml": false,
+      "clojure": false,
+      "terraform": false,
+      "nix": false,
+      "toml": false
+    },
+    "configured": {},
+    "counts": {
+      "jsts": 2
+    },
+    "detectedKinds": [
+      "jsts"
+    ]
+  }
+}

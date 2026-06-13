@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "files": {
+    "web/server.js": {
+      "latest": {
+        "commit": "7615bfd",
+        "timestamp": "2026-06-13T13:08:45.547Z",
+        "mi": 45.4,
+        "cognitive": 10,
+        "nesting": 3,
+        "lines": 41,
+        "maxCyclomatic": 7,
+        "entropy": 5.51
+      },
+      "history": [
+        {
+          "commit": "7615bfd",
+          "timestamp": "2026-06-13T13:08:45.547Z",
+          "mi": 45.4,
+          "cognitive": 10,
+          "nesting": 3,
+          "lines": 41,
+          "maxCyclomatic": 7,
+          "entropy": 5.51
+        }
+      ],
+      "trend": "stable"
+    },
+    "web/db.js": {
+      "latest": {
+        "commit": "7615bfd",
+        "timestamp": "2026-06-13T13:08:45.564Z",
+        "mi": 47.4,
+        "cognitive": 6,
+        "nesting": 2,
+        "lines": 45,
+        "maxCyclomatic": 5,
+        "entropy": 4.73
+      },
+      "history": [
+        {
+          "commit": "7615bfd",
+          "timestamp": "2026-06-13T13:08:45.564Z",
+          "mi": 47.4,
+          "cognitive": 6,
+          "nesting": 2,
+          "lines": 45,
+          "maxCyclomatic": 5,
+          "entropy": 4.73
+        }
+      ],
+      "trend": "stable"
+    }
+  },
+  "capturedAt": "2026-06-13T13:08:50.573Z"
+}
